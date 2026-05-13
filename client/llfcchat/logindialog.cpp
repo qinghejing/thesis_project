@@ -6,12 +6,16 @@
 #include <QRegExp>
 #include <QRegularExpression>
 #include <QPainter>
+#include <QPainterPath>
+#include <QResizeEvent>
+#include <QtGlobal>
 
 LoginDialog::LoginDialog(QWidget *parent) :
     QDialog(parent),
     ui(new Ui::LoginDialog)
 {
     ui->setupUi(this);
+    ui->gridLayout->setAlignment(ui->head_label, Qt::AlignCenter);
     connect(ui->reg_btn, &QPushButton::clicked, this, &LoginDialog::switchRegister);
     ui->forget_label->SetState("normal","hover","","selected","selected_hover","");
     ui->forget_label->setCursor(Qt::PointingHandCursor);
@@ -39,32 +43,47 @@ LoginDialog::~LoginDialog()
 
 void LoginDialog::initHead()
 {
-    // 加载图片
     QPixmap originalPixmap(":/res/head_1.jpg");
-      // 设置图片自动缩放
-    qDebug()<< originalPixmap.size() << ui->head_label->size();
-    originalPixmap = originalPixmap.scaled(ui->head_label->size(),
+    if(originalPixmap.isNull()){
+        return;
+    }
+
+    QSize label_size = ui->head_label->contentsRect().size();
+    if(label_size.isEmpty()){
+        return;
+    }
+
+    const qreal dpr = devicePixelRatioF();
+    QSize target_size(qRound(label_size.width() * dpr),
+                      qRound(label_size.height() * dpr));
+    QPixmap scaled_pixmap = originalPixmap.scaled(target_size,
             Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    scaled_pixmap.setDevicePixelRatio(dpr);
 
-    // 创建一个和原始图片相同大小的QPixmap，用于绘制圆角图片
-    QPixmap roundedPixmap(originalPixmap.size());
-    roundedPixmap.fill(Qt::transparent); // 用透明色填充
-
+    QPixmap roundedPixmap(scaled_pixmap.size());
+    roundedPixmap.setDevicePixelRatio(dpr);
+    roundedPixmap.fill(Qt::transparent);
     QPainter painter(&roundedPixmap);
-    painter.setRenderHint(QPainter::Antialiasing); // 设置抗锯齿，使圆角更平滑
+    painter.setRenderHint(QPainter::Antialiasing);
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
 
-    // 使用QPainterPath设置圆角
     QPainterPath path;
-    path.addRoundedRect(0, 0, originalPixmap.width(), originalPixmap.height(), 10, 10); // 最后两个参数分别是x和y方向的圆角半径
+    QRectF pixmap_rect(0, 0, scaled_pixmap.width() / dpr,
+                       scaled_pixmap.height() / dpr);
+    path.addRoundedRect(pixmap_rect, 10, 10);
     painter.setClipPath(path);
 
-    // 将原始图片绘制到roundedPixmap上
-    painter.drawPixmap(0, 0, originalPixmap);
+    painter.drawPixmap(QPointF(0, 0), scaled_pixmap);
 
-    // 设置绘制好的圆角图片到QLabel上
+    ui->head_label->setAlignment(Qt::AlignCenter);
     ui->head_label->setPixmap(roundedPixmap);
 
+}
+
+void LoginDialog::resizeEvent(QResizeEvent *event)
+{
+    QDialog::resizeEvent(event);
+    initHead();
 }
 
 void LoginDialog::initHttpHandlers()

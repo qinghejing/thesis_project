@@ -33,6 +33,8 @@ public slots:
     void SlotSwitchLogin2();
     void SlotSwitchChat();
 private:
+    void applyAuthWindowSize(bool reset_to_default);
+
     Ui::MainWindow *ui;
     LoginDialog* _login_dlg;
     RegisterDialog* _reg_dlg;

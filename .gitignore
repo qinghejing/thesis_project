@@ -75,6 +75,7 @@ moc_*.cpp
 moc_*.h
 qrc_*.cpp
 ui_*.h
+*_resource.rc
 object_script.*
 build-*/
 

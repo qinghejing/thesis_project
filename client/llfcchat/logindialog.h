@@ -4,6 +4,8 @@
 #include <QDialog>
 #include "global.h"
 
+class QResizeEvent;
+
 namespace Ui {
 class LoginDialog;
 }
@@ -15,6 +17,8 @@ class LoginDialog : public QDialog
 public:
     explicit LoginDialog(QWidget *parent = nullptr);
     ~LoginDialog();
+protected:
+    void resizeEvent(QResizeEvent *event) override;
 private:
     void initHead();
     void initHttpHandlers();
