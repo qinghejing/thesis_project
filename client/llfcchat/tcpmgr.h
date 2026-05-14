@@ -25,7 +25,7 @@ private:
     QByteArray _buffer;
     bool _b_recv_pending;
     quint16 _message_id;
-    quint16 _message_len;
+    quint32 _message_len;
     QMap<ReqId, std::function<void(ReqId id, int len, QByteArray data)>> _handlers;
 public slots:
     void slot_tcp_connect(ServerInfo);

@@ -15,6 +15,8 @@ enum ErrorCodes {
 	PasswdInvalid = 1009,   //密码更新失败
 	TokenInvalid = 1010,   //Token失效
 	UidInvalid = 1011,  //uid无效
+	FileNotExists = 1012, //文件不存在
+	FileWriteFailed = 1013, //文件写入失败
 };
 
 
@@ -33,15 +35,16 @@ private:
 	std::function<void()> func_;
 };
 
-#define MAX_LENGTH  1024*2
+#define MAX_LENGTH  1024*64
 //头部总长度
-#define HEAD_TOTAL_LEN 4
+#define HEAD_TOTAL_LEN 6
 //头部id长度
 #define HEAD_ID_LEN 2
 //头部数据长度
-#define HEAD_DATA_LEN 2
+#define HEAD_DATA_LEN 4
 #define MAX_RECVQUE  10000
 #define MAX_SENDQUE 1000
+#define FILE_WORKER_COUNT 4
 
 
 enum MSG_IDS {
@@ -58,6 +61,8 @@ enum MSG_IDS {
 	ID_TEXT_CHAT_MSG_REQ = 1017, //文本聊天信息请求
 	ID_TEXT_CHAT_MSG_RSP = 1018, //文本聊天信息回复
 	ID_NOTIFY_TEXT_CHAT_MSG_REQ = 1019, //通知用户文本聊天信息
+	ID_UPLOAD_FILE_REQ = 1020, //上传文件分片请求
+	ID_UPLOAD_FILE_RSP = 1021, //上传文件分片回复
 };
 
 #define USERIPPREFIX  "uip_"

@@ -37,7 +37,15 @@ enum ReqId{
     ID_TEXT_CHAT_MSG_REQ  = 1017,  //文本聊天信息请求
     ID_TEXT_CHAT_MSG_RSP  = 1018,  //文本聊天信息回复
     ID_NOTIFY_TEXT_CHAT_MSG_REQ = 1019, //通知用户文本聊天信息
+    ID_UPLOAD_FILE_REQ = 1020,
+    ID_UPLOAD_FILE_RSP = 1021,
 };
+
+const int TCP_HEAD_ID_LEN = 2;
+const int TCP_HEAD_DATA_LEN = 4;
+const int TCP_HEAD_TOTAL_LEN = 6;
+const int MAX_FILE_CHUNK_LEN = 1024 * 2;
+const qint64 MAX_SEND_FILE_SIZE = 4LL * 1024 * 1024 * 1024 - 1;
 
 enum ErrorCodes{
     SUCCESS = 0,

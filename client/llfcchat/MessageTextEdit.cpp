@@ -133,9 +133,9 @@ void MessageTextEdit::insertTextFile(const QString &url)
         return;
     }
 
-    if(fileInfo.size()>100*1024*1024)
+    if(fileInfo.size()>MAX_SEND_FILE_SIZE)
     {
-        QMessageBox::information(this,"提示","发送的文件大小不能大于100M");
+        QMessageBox::information(this,"提示","发送的文件大小不能大于4G");
         return;
     }
 

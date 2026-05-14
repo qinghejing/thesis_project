@@ -5,9 +5,28 @@
 #include "RedisMgr.h"
 #include "UserMgr.h"
 #include "ChatGrpcClient.h"
+#include "FileSystem.h"
 
 using namespace std;
 
+namespace {
+long long JsonToInt64(const Json::Value& value) {
+	if (value.isString()) {
+		try {
+			return std::stoll(value.asString());
+		}
+		catch (...) {
+			return 0;
+		}
+	}
+
+	if (value.isNumeric()) {
+		return static_cast<long long>(value.asDouble());
+	}
+
+	return 0;
+}
+}
 LogicSystem::LogicSystem():_b_stop(false){
 	RegisterCallBacks();
 	_worker_thread = std::thread (&LogicSystem::DealMsg, this);
@@ -19,6 +38,21 @@ LogicSystem::~LogicSystem(){
 	_worker_thread.join();
 }
 
+
+void LogicSystem::AddMD5File(std::string md5, std::shared_ptr<FileInfo> fileinfo) {
+	std::lock_guard<std::mutex> lock(_file_mutex);
+	_map_md5_files[md5] = fileinfo;
+}
+
+std::shared_ptr<FileInfo> LogicSystem::GetFileInfo(std::string md5) {
+	std::lock_guard<std::mutex> lock(_file_mutex);
+	auto iter = _map_md5_files.find(md5);
+	if (iter == _map_md5_files.end()) {
+		return nullptr;
+	}
+
+	return iter->second;
+}
 void LogicSystem::PostMsgToQue(shared_ptr < LogicNode> msg) {
 	std::unique_lock<std::mutex> unique_lk(_mutex);
 	_msg_que.push(msg);
@@ -83,6 +117,9 @@ void LogicSystem::RegisterCallBacks() {
 		placeholders::_1, placeholders::_2, placeholders::_3);
 
 	_fun_callbacks[ID_TEXT_CHAT_MSG_REQ] = std::bind(&LogicSystem::DealChatTextMsg, this,
+		placeholders::_1, placeholders::_2, placeholders::_3);
+
+	_fun_callbacks[ID_UPLOAD_FILE_REQ] = std::bind(&LogicSystem::DealFileUpload, this,
 		placeholders::_1, placeholders::_2, placeholders::_3);
 	
 }
@@ -448,6 +485,63 @@ void LogicSystem::DealChatTextMsg(std::shared_ptr<CSession> session, const short
 }
 
 
+void LogicSystem::DealFileUpload(std::shared_ptr<CSession> session, const short& msg_id, const string& msg_data) {
+	Json::Reader reader;
+	Json::Value root;
+	Json::Value rtvalue;
+	rtvalue["error"] = ErrorCodes::Success;
+
+	Defer defer([this, &rtvalue, session]() {
+		std::string return_str = rtvalue.toStyledString();
+		session->Send(return_str, ID_UPLOAD_FILE_RSP);
+		});
+
+	if (!reader.parse(msg_data, root)) {
+		rtvalue["error"] = ErrorCodes::Error_Json;
+		return;
+	}
+
+	auto md5 = root.get("md5", "").asString();
+	auto name = root.get("name", "").asString();
+	auto seq = root.get("seq", 0).asInt();
+	auto total_size = JsonToInt64(root["total_size"]);
+	auto trans_size = JsonToInt64(root["trans_size"]);
+	auto last = root.get("last", 0).asInt();
+	auto file_data = root.get("data", "").asString();
+
+	rtvalue["md5"] = md5;
+	rtvalue["name"] = name;
+	rtvalue["seq"] = seq;
+	rtvalue["total_size"] = std::to_string(total_size);
+	rtvalue["trans_size"] = std::to_string(trans_size);
+	rtvalue["last"] = last;
+
+	if (md5.empty() || name.empty() || seq <= 0 || total_size < 0 || trans_size < 0) {
+		rtvalue["error"] = ErrorCodes::Error_Json;
+		return;
+	}
+
+	if (seq == 1) {
+		auto file_info = std::make_shared<FileInfo>(seq, name, total_size, trans_size);
+		AddMD5File(md5, file_info);
+	}
+	else {
+		auto file_info = GetFileInfo(md5);
+		if (file_info == nullptr) {
+			rtvalue["error"] = ErrorCodes::FileNotExists;
+			return;
+		}
+
+		file_info->_seq = seq;
+		file_info->_trans_size = trans_size;
+	}
+
+	std::hash<std::string> hash_fn;
+	int index = static_cast<int>(hash_fn(md5 + name) % FILE_WORKER_COUNT);
+	FileSystem::GetInstance()->PostMsgToQue(
+		std::make_shared<FileTask>(session, md5, name, seq, total_size,
+			trans_size, last, file_data), index);
+}
 
 bool LogicSystem::isPureDigit(const std::string& str)
 {

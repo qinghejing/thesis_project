@@ -56,7 +56,7 @@ void CSession::Send(std::string msg, short msgid) {
 		std::bind(&CSession::HandleWrite, this, std::placeholders::_1, SharedSelf()));
 }
 
-void CSession::Send(char* msg, short max_length, short msgid) {
+void CSession::Send(char* msg, int max_length, short msgid) {
 	std::lock_guard<std::mutex> lock(_send_lock);
 	int send_que_size = _send_que.size();
 	if (send_que_size > MAX_SENDQUE) {
@@ -152,10 +152,10 @@ void CSession::AsyncReadHead(int total_len)
 				_server->ClearSession(_session_id);
 				return;
 			}
-			short msg_len = 0;
+			int msg_len = 0;
 			memcpy(&msg_len, _recv_head_node->_data + HEAD_ID_LEN, HEAD_DATA_LEN);
 			//网络字节序转化为本地字节序
-			msg_len = boost::asio::detail::socket_ops::network_to_host_short(msg_len);
+			msg_len = boost::asio::detail::socket_ops::network_to_host_long(msg_len);
 			std::cout << "msg_len is " << msg_len << endl;
 
 			//id非法

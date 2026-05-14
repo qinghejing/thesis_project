@@ -3,6 +3,7 @@
 
 #include <QWidget>
 #include "userdata.h"
+#include "global.h"
 #include <QMap>
 
 namespace Ui {
@@ -24,8 +25,11 @@ private slots:
 
     void on_receive_btn_clicked();
 
+    void on_file_lb_clicked(QString, ClickLbState);
+
 private:
     void clearItems();
+    bool sendFileMsg(const QString& file_path, int from_uid, int to_uid);
     Ui::ChatPage *ui;
     std::shared_ptr<UserInfo> _user_info;
     QMap<QString, QWidget*>  _bubble_map;

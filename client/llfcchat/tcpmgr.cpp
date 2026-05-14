@@ -15,22 +15,23 @@ TcpMgr::TcpMgr():_host(""),_port(0),_b_recv_pending(false),_message_id(0),_messa
            // 读取所有数据并追加到缓冲区
            _buffer.append(_socket.readAll());
 
-           QDataStream stream(&_buffer, QIODevice::ReadOnly);
-           stream.setVersion(QDataStream::Qt_5_0);
-
            forever {
                 //先解析头部
                if(!_b_recv_pending){
                    // 检查缓冲区中的数据是否足够解析出一个消息头（消息ID + 消息长度）
-                   if (_buffer.size() < static_cast<int>(sizeof(quint16) * 2)) {
+                   if (_buffer.size() < TCP_HEAD_TOTAL_LEN) {
                        return; // 数据不够，等待更多数据
                    }
 
                    // 预读取消息ID和消息长度，但不从缓冲区中移除
+                   QByteArray header = _buffer.left(TCP_HEAD_TOTAL_LEN);
+                   QDataStream stream(header);
+                   stream.setVersion(QDataStream::Qt_5_0);
+                   stream.setByteOrder(QDataStream::BigEndian);
                    stream >> _message_id >> _message_len;
 
                    //将buffer 中的前四个字节移除
-                   _buffer = _buffer.mid(sizeof(quint16) * 2);
+                   _buffer = _buffer.mid(TCP_HEAD_TOTAL_LEN);
 
                    // 输出读取的数据
                    qDebug() << "Message ID:" << _message_id << ", Length:" << _message_len;
@@ -38,18 +39,18 @@ TcpMgr::TcpMgr():_host(""),_port(0),_b_recv_pending(false),_message_id(0),_messa
                }
 
                 //buffer剩余长读是否满足消息体长度，不满足则退出继续等待接受
-               if(_buffer.size() < _message_len){
+               if(_buffer.size() < static_cast<int>(_message_len)){
                     _b_recv_pending = true;
                     return;
                }
 
                _b_recv_pending = false;
                // 读取消息体
-               QByteArray messageBody = _buffer.mid(0, _message_len);
+               QByteArray messageBody = _buffer.mid(0, static_cast<int>(_message_len));
                qDebug() << "receive body msg is " << messageBody ;
 
-               _buffer = _buffer.mid(_message_len);
-               handleMsg(ReqId(_message_id),_message_len, messageBody);
+               _buffer = _buffer.mid(static_cast<int>(_message_len));
+               handleMsg(ReqId(_message_id), static_cast<int>(_message_len), messageBody);
            }
 
        });
@@ -400,6 +401,29 @@ void TcpMgr::initHandlers()
                 jsonObj["touid"].toInt(),jsonObj["text_array"].toArray());
         emit sig_text_chat_msg(msg_ptr);
       });
+
+    _handlers.insert(ID_UPLOAD_FILE_RSP, [this](ReqId id, int len, QByteArray data) {
+        Q_UNUSED(len);
+        qDebug() << "handle id is " << id << " data is " << data;
+        QJsonDocument jsonDoc = QJsonDocument::fromJson(data);
+        if (jsonDoc.isNull()) {
+            qDebug() << "Failed to create QJsonDocument.";
+            return;
+        }
+
+        QJsonObject jsonObj = jsonDoc.object();
+        int err = jsonObj["error"].toInt(ErrorCodes::ERR_JSON);
+        if (err != ErrorCodes::SUCCESS) {
+            qDebug() << "Upload File Rsp Failed, err is " << err
+                     << " md5 is " << jsonObj["md5"].toString()
+                     << " seq is " << jsonObj["seq"].toInt();
+            return;
+        }
+
+        qDebug() << "Upload File Rsp Success, md5 is " << jsonObj["md5"].toString()
+                 << " seq is " << jsonObj["seq"].toInt()
+                 << " trans_size is " << jsonObj["trans_size"].toString();
+      });
 }
 
 void TcpMgr::handleMsg(ReqId id, int len, QByteArray data)
@@ -428,7 +452,7 @@ void TcpMgr::slot_send_data(ReqId reqId, QByteArray dataBytes)
     uint16_t id = reqId;
 
     // 计算长度（使用网络字节序转换）
-    quint16 len = static_cast<quint16>(dataBytes.length());
+    quint32 len = static_cast<quint32>(dataBytes.length());
 
     // 创建一个QByteArray用于存储要发送的所有数据
     QByteArray block;
@@ -447,5 +471,3 @@ void TcpMgr::slot_send_data(ReqId reqId, QByteArray dataBytes)
     _socket.write(block);
     qDebug() << "tcp mgr send byte data is " << block ;
 }
-
-
