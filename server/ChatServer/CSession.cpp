@@ -78,6 +78,13 @@ void CSession::Close() {
 	_b_close = true;
 }
 
+void CSession::NotifyOffline(int uid) {
+	Json::Value rtvalue;
+	rtvalue["error"] = ErrorCodes::Success;
+	rtvalue["uid"] = uid;
+	Send(rtvalue.toStyledString(), ID_NOTIFY_OFF_LINE_REQ);
+	Close();
+}
 std::shared_ptr<CSession>CSession::SharedSelf() {
 	return shared_from_this();
 }

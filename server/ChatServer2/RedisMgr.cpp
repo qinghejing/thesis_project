@@ -1,12 +1,25 @@
 #include "RedisMgr.h"
 #include "const.h"
 #include "ConfigMgr.h"
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_generators.hpp>
+#include <boost/uuid/uuid_io.hpp>
+#include <chrono>
+#include <thread>
+
+namespace {
+std::string GenerateLockId() {
+	boost::uuids::uuid uuid = boost::uuids::random_generator()();
+	return boost::uuids::to_string(uuid);
+}
+}
+
 RedisMgr::RedisMgr() {
 	auto& gCfgMgr = ConfigMgr::Inst();
 	auto host = gCfgMgr["Redis"]["Host"];
 	auto port = gCfgMgr["Redis"]["Port"];
 	auto pwd = gCfgMgr["Redis"]["Passwd"];
-	_con_pool.reset(new RedisConPool(5, host.c_str(), atoi(port.c_str()), pwd.c_str()));
+	_con_pool.reset(new RedisConPool(10, host.c_str(), atoi(port.c_str()), pwd.c_str()));
 }
 
 RedisMgr::~RedisMgr() {
@@ -356,5 +369,105 @@ bool RedisMgr::ExistsKey(const std::string &key)
 	_con_pool->returnConnection(connect);
 	return true;
 }
+std::string RedisMgr::acquireLock(const std::string& lockName, int lockTimeout, int acquireTimeout)
+{
+	auto connect = _con_pool->getConnection();
+	if (connect == nullptr) {
+		return "";
+	}
 
+	Defer defer([&connect, this]() {
+		_con_pool->returnConnection(connect);
+		});
 
+	std::string identifier = GenerateLockId();
+	auto end_time = std::chrono::steady_clock::now() + std::chrono::seconds(acquireTimeout);
+	while (std::chrono::steady_clock::now() < end_time) {
+		auto reply = (redisReply*)redisCommand(connect, "SET %s %s NX EX %d", lockName.c_str(), identifier.c_str(), lockTimeout);
+		if (reply != nullptr) {
+			if (reply->type == REDIS_REPLY_STATUS && std::string(reply->str) == "OK") {
+				freeReplyObject(reply);
+				return identifier;
+			}
+			freeReplyObject(reply);
+		}
+
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	}
+
+	return "";
+}
+
+bool RedisMgr::releaseLock(const std::string& lockName, const std::string& identifier)
+{
+	if (identifier.empty()) {
+		return true;
+	}
+
+	auto connect = _con_pool->getConnection();
+	if (connect == nullptr) {
+		return false;
+	}
+
+	Defer defer([&connect, this]() {
+		_con_pool->returnConnection(connect);
+		});
+
+	const char* script = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
+	auto reply = (redisReply*)redisCommand(connect, "EVAL %s 1 %s %s", script, lockName.c_str(), identifier.c_str());
+	if (reply == nullptr) {
+		return false;
+	}
+
+	bool success = reply->type == REDIS_REPLY_INTEGER && reply->integer == 1;
+	freeReplyObject(reply);
+	return success;
+}
+
+bool RedisMgr::InitCount(const std::string& server_name)
+{
+	return HSet(LOGIN_COUNT, server_name, "0");
+}
+
+bool RedisMgr::IncreaseCount(const std::string& server_name)
+{
+	auto connect = _con_pool->getConnection();
+	if (connect == nullptr) {
+		return false;
+	}
+
+	Defer defer([&connect, this]() {
+		_con_pool->returnConnection(connect);
+		});
+
+	auto reply = (redisReply*)redisCommand(connect, "HINCRBY %s %s 1", LOGIN_COUNT, server_name.c_str());
+	if (reply == nullptr) {
+		return false;
+	}
+
+	bool success = reply->type == REDIS_REPLY_INTEGER;
+	freeReplyObject(reply);
+	return success;
+}
+
+bool RedisMgr::DecreaseCount(const std::string& server_name)
+{
+	auto connect = _con_pool->getConnection();
+	if (connect == nullptr) {
+		return false;
+	}
+
+	Defer defer([&connect, this]() {
+		_con_pool->returnConnection(connect);
+		});
+
+	const char* script = "local v = redis.call('hincrby', KEYS[1], ARGV[1], -1); if v < 0 then redis.call('hset', KEYS[1], ARGV[1], 0); return 0; end; return v";
+	auto reply = (redisReply*)redisCommand(connect, "EVAL %s 1 %s %s", script, LOGIN_COUNT, server_name.c_str());
+	if (reply == nullptr) {
+		return false;
+	}
+
+	bool success = reply->type == REDIS_REPLY_INTEGER;
+	freeReplyObject(reply);
+	return success;
+}

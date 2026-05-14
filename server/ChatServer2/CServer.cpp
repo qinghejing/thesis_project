@@ -2,6 +2,8 @@
 #include <iostream>
 #include "AsioIOServicePool.h"
 #include "UserMgr.h"
+#include "RedisMgr.h"
+#include "ConfigMgr.h"
 CServer::CServer(boost::asio::io_context& io_context, short port):_io_context(io_context), _port(port),
 _acceptor(io_context, tcp::endpoint(tcp::v4(),port))
 {
@@ -33,15 +35,23 @@ void CServer::StartAccept() {
 }
 
 void CServer::ClearSession(std::string uuid) {
-	
-	if (_sessions.find(uuid) != _sessions.end()) {
-		//移除用户和session的关联
-		UserMgr::GetInstance()->RmvUserSession(_sessions[uuid]->GetUserId());
-	}
-
+	std::shared_ptr<CSession> session = nullptr;
 	{
 		lock_guard<mutex> lock(_mutex);
-		_sessions.erase(uuid);
+		auto iter = _sessions.find(uuid);
+		if (iter == _sessions.end()) {
+			return;
+		}
+		session = iter->second;
+		_sessions.erase(iter);
 	}
-	
+
+	if (session) {
+		auto uid = session->GetUserId();
+		if (uid > 0) {
+			UserMgr::GetInstance()->RmvUserSession(uid);
+			auto server_name = ConfigMgr::Inst().GetValue("SelfServer", "Name");
+			RedisMgr::GetInstance()->DecreaseCount(server_name);
+		}
+	}
 }

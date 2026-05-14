@@ -2,7 +2,8 @@
 #include <QAbstractSocket>
 #include "usermgr.h"
 
-TcpMgr::TcpMgr():_host(""),_port(0),_b_recv_pending(false),_message_id(0),_message_len(0)
+TcpMgr::TcpMgr():_host(""),_port(0),_b_recv_pending(false),_message_id(0),_message_len(0),
+    _b_login_in(false),_b_notify_offline(false)
 {
     QObject::connect(&_socket, &QTcpSocket::connected, [&]() {
            qDebug() << "Connected to server!";
@@ -93,6 +94,7 @@ TcpMgr::TcpMgr():_host(""),_port(0),_b_recv_pending(false),_message_id(0),_messa
         // 处理连接断开
         QObject::connect(&_socket, &QTcpSocket::disconnected, [&]() {
             qDebug() << "Disconnected from server.";
+            notifyOffline();
         });
         //连接发送信号用来发送数据
         QObject::connect(this, &TcpMgr::sig_send_data, this, &TcpMgr::slot_send_data);
@@ -131,6 +133,7 @@ void TcpMgr::initHandlers()
         int err = jsonObj["error"].toInt();
         if(err != ErrorCodes::SUCCESS){
             qDebug() << "Login Failed, err is " << err ;
+            _b_login_in = false;
             emit sig_login_failed(err);
             return;
         }
@@ -144,6 +147,8 @@ void TcpMgr::initHandlers()
  
         UserMgr::GetInstance()->SetUserInfo(user_info);
         UserMgr::GetInstance()->SetToken(jsonObj["token"].toString());
+        _b_login_in = true;
+        _b_notify_offline = false;
         if(jsonObj.contains("apply_list")){
             UserMgr::GetInstance()->AppendApplyList(jsonObj["apply_list"].toArray());
         }
@@ -402,6 +407,20 @@ void TcpMgr::initHandlers()
         emit sig_text_chat_msg(msg_ptr);
       });
 
+    _handlers.insert(ID_NOTIFY_OFF_LINE_REQ, [this](ReqId id, int len, QByteArray data) {
+        Q_UNUSED(id);
+        Q_UNUSED(len);
+        qDebug() << "receive offline notify, data is " << data;
+
+        QJsonDocument jsonDoc = QJsonDocument::fromJson(data);
+        if (jsonDoc.isNull()) {
+            qDebug() << "Failed to create QJsonDocument.";
+        }
+
+        notifyOffline();
+        _socket.disconnectFromHost();
+      });
+
     _handlers.insert(ID_UPLOAD_FILE_RSP, [this](ReqId id, int len, QByteArray data) {
         Q_UNUSED(len);
         qDebug() << "handle id is " << id << " data is " << data;
@@ -435,6 +454,17 @@ void TcpMgr::handleMsg(ReqId id, int len, QByteArray data)
    }
 
    find_iter.value()(id,len,data);
+}
+
+void TcpMgr::notifyOffline()
+{
+    if(!_b_login_in || _b_notify_offline){
+        return;
+    }
+
+    _b_notify_offline = true;
+    _b_login_in = false;
+    emit sig_notify_offline();
 }
 
 void TcpMgr::slot_tcp_connect(ServerInfo si)

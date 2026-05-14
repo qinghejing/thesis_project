@@ -32,6 +32,7 @@ public slots:
     void SlotSwitchReset();
     void SlotSwitchLogin2();
     void SlotSwitchChat();
+    void SlotNotifyOffline();
 private:
     void applyAuthWindowSize(bool reset_to_default);
 

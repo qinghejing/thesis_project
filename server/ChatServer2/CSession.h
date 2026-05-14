@@ -35,6 +35,7 @@ public:
 	void Send(char* msg, int max_length, short msgid);
 	void Send(std::string msg, short msgid);
 	void Close();
+	void NotifyOffline(int uid);
 	std::shared_ptr<CSession> SharedSelf();
 	void AsyncReadBody(int length);
 	void AsyncReadHead(int total_len);

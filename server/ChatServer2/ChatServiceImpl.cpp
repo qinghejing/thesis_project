@@ -7,9 +7,15 @@
 #include "RedisMgr.h"
 #include "MysqlMgr.h"
 
-ChatServiceImpl::ChatServiceImpl()
+#include "CServer.h"
+ChatServiceImpl::ChatServiceImpl(): _server(nullptr)
 {
 
+}
+
+void ChatServiceImpl::RegisterServer(CServer* server)
+{
+	_server = server;
 }
 
 Status ChatServiceImpl::NotifyAddFriend(ServerContext* context, const AddFriendReq* request, AddFriendRsp* reply)
@@ -122,6 +128,29 @@ Status ChatServiceImpl::NotifyTextChatMsg(::grpc::ServerContext* context,
 	return Status::OK;
 }
 
+
+
+Status ChatServiceImpl::NotifyKickUser(::grpc::ServerContext* context,
+	const KickUserReq* request, KickUserRsp* reply) {
+	auto uid = request->uid();
+	reply->set_error(ErrorCodes::Success);
+	reply->set_uid(uid);
+
+	auto session = UserMgr::GetInstance()->GetSession(uid);
+	if (session == nullptr) {
+		return Status::OK;
+	}
+
+	session->NotifyOffline(uid);
+	if (_server) {
+		_server->ClearSession(session->GetSessionId());
+	}
+	else {
+		UserMgr::GetInstance()->RmvUserSession(uid);
+	}
+
+	return Status::OK;
+}
 
 bool ChatServiceImpl::GetBaseInfo(std::string base_key, int uid, std::shared_ptr<UserInfo>& userinfo)
 {

@@ -63,6 +63,7 @@ enum MSG_IDS {
 	ID_NOTIFY_TEXT_CHAT_MSG_REQ = 1019, //通知用户文本聊天信息
 	ID_UPLOAD_FILE_REQ = 1020, //上传文件分片请求
 	ID_UPLOAD_FILE_RSP = 1021, //上传文件分片回复
+	ID_NOTIFY_OFF_LINE_REQ = 1022, //notify offline
 };
 
 #define USERIPPREFIX  "uip_"
@@ -73,3 +74,7 @@ enum MSG_IDS {
 #define NAME_INFO  "nameinfo_"
 
 
+#define LOCK_PREFIX "lock_"
+#define LOCK_COUNT "lock_count"
+#define LOCK_TIME_OUT 10
+#define ACQUIRE_TIME_OUT 3

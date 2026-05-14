@@ -7,6 +7,7 @@
 #include "ChatGrpcClient.h"
 #include "FileSystem.h"
 
+#include "CServer.h"
 using namespace std;
 
 namespace {
@@ -27,7 +28,7 @@ long long JsonToInt64(const Json::Value& value) {
 	return 0;
 }
 }
-LogicSystem::LogicSystem():_b_stop(false){
+LogicSystem::LogicSystem():_b_stop(false), _server(nullptr){
 	RegisterCallBacks();
 	_worker_thread = std::thread (&LogicSystem::DealMsg, this);
 }
@@ -39,6 +40,9 @@ LogicSystem::~LogicSystem(){
 }
 
 
+void LogicSystem::SetServer(CServer* server) {
+	_server = server;
+}
 void LogicSystem::AddMD5File(std::string md5, std::shared_ptr<FileInfo> fileinfo) {
 	std::lock_guard<std::mutex> lock(_file_mutex);
 	_map_md5_files[md5] = fileinfo;
@@ -154,6 +158,44 @@ void LogicSystem::LoginHandler(shared_ptr<CSession> session, const short &msg_id
 		return ;
 	}
 
+	auto server_name = ConfigMgr::Inst().GetValue("SelfServer", "Name");
+	auto lock_key = std::string(LOCK_PREFIX) + uid_str;
+	auto identifier = RedisMgr::GetInstance()->acquireLock(lock_key, LOCK_TIME_OUT, ACQUIRE_TIME_OUT);
+	if (identifier.empty()) {
+		rtvalue["error"] = ErrorCodes::RPCFailed;
+		return;
+	}
+
+	Defer lock_defer([lock_key, identifier]() {
+		RedisMgr::GetInstance()->releaseLock(lock_key, identifier);
+		});
+
+	std::string old_server_name = "";
+	std::string ipkey = USERIPPREFIX + uid_str;
+	if (RedisMgr::GetInstance()->Get(ipkey, old_server_name)) {
+		if (old_server_name == server_name) {
+			auto old_session = UserMgr::GetInstance()->GetSession(uid);
+			if (old_session && old_session != session) {
+				old_session->NotifyOffline(uid);
+				if (_server) {
+					_server->ClearSession(old_session->GetSessionId());
+				}
+				else {
+					UserMgr::GetInstance()->RmvUserSession(uid);
+				}
+			}
+		}
+		else {
+			KickUserReq kick_req;
+			kick_req.set_uid(uid);
+			auto kick_rsp = ChatGrpcClient::GetInstance()->NotifyKickUser(old_server_name, kick_req);
+			if (kick_rsp.error() != ErrorCodes::Success) {
+				rtvalue["error"] = kick_rsp.error();
+				return;
+			}
+		}
+	}
+
 	rtvalue["error"] = ErrorCodes::Success;
 
 	std::string base_key = USER_BASE_INFO + uid_str;
@@ -204,21 +246,10 @@ void LogicSystem::LoginHandler(shared_ptr<CSession> session, const short &msg_id
 		rtvalue["friend_list"].append(obj);
 	}
 
-	auto server_name = ConfigMgr::Inst().GetValue("SelfServer", "Name");
-	//将登录数量增加
-	auto rd_res = RedisMgr::GetInstance()->HGet(LOGIN_COUNT, server_name);
-	int count = 0;
-	if (!rd_res.empty()) {
-		count = std::stoi(rd_res);
-	}
-
-	count++;
-	auto count_str = std::to_string(count);
-	RedisMgr::GetInstance()->HSet(LOGIN_COUNT, server_name, count_str);
+	RedisMgr::GetInstance()->IncreaseCount(server_name);
 	//session绑定用户uid
 	session->SetUserId(uid);
 	//为用户设置登录ip server的名字
-	std::string  ipkey = USERIPPREFIX + uid_str;
 	RedisMgr::GetInstance()->Set(ipkey, server_name);
 	//uid和session绑定管理,方便以后踢人操作
 	UserMgr::GetInstance()->SetUserSession(uid, session);

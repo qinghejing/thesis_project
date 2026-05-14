@@ -39,6 +39,7 @@ enum ReqId{
     ID_NOTIFY_TEXT_CHAT_MSG_REQ = 1019, //通知用户文本聊天信息
     ID_UPLOAD_FILE_REQ = 1020,
     ID_UPLOAD_FILE_RSP = 1021,
+    ID_NOTIFY_OFF_LINE_REQ = 1022,
 };
 
 const int TCP_HEAD_ID_LEN = 2;

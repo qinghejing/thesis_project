@@ -3,6 +3,7 @@
 #include "resetdialog.h"
 #include "tcpmgr.h"
 #include <QLayout>
+#include <QMessageBox>
 #include <QSize>
 
 namespace {
@@ -13,7 +14,11 @@ const QSize kChatMinimumSize(1050, 900);
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
-    ui(new Ui::MainWindow)
+    ui(new Ui::MainWindow),
+    _login_dlg(nullptr),
+    _reg_dlg(nullptr),
+    _reset_dlg(nullptr),
+    _chat_dlg(nullptr)
 {
     ui->setupUi(this);
     //创建一个CentralWidget, 并将其设置为MainWindow的中心部件
@@ -28,6 +33,7 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(_login_dlg, &LoginDialog::switchReset, this, &MainWindow::SlotSwitchReset);
     //连接创建聊天界面信号
     connect(TcpMgr::GetInstance().get(),&TcpMgr::sig_swich_chatdlg, this, &MainWindow::SlotSwitchChat);
+    connect(TcpMgr::GetInstance().get(),&TcpMgr::sig_notify_offline, this, &MainWindow::SlotNotifyOffline);
 
 
     //测试用
@@ -139,4 +145,24 @@ void MainWindow::SlotSwitchChat()
     if(chat_size != size()){
         resize(chat_size);
     }
+}
+
+void MainWindow::SlotNotifyOffline()
+{
+    QMessageBox::warning(this, tr("提示"), tr("账号已在其他设备登录，当前连接已断开。"));
+
+    _login_dlg = new LoginDialog(this);
+    _login_dlg->setWindowFlags(Qt::CustomizeWindowHint|Qt::FramelessWindowHint);
+    if(_chat_dlg){
+        _chat_dlg->hide();
+    }
+    setCentralWidget(_login_dlg);
+    _chat_dlg = nullptr;
+    _reg_dlg = nullptr;
+    _reset_dlg = nullptr;
+    applyAuthWindowSize(true);
+    _login_dlg->show();
+
+    connect(_login_dlg, &LoginDialog::switchRegister, this, &MainWindow::SlotSwitchReg);
+    connect(_login_dlg, &LoginDialog::switchReset, this, &MainWindow::SlotSwitchReset);
 }

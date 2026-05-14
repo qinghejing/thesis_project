@@ -5,6 +5,7 @@
 #include <atomic>
 #include <mutex>
 #include "Singleton.h"
+#include <string>
 class RedisConPool {
 public:
 	RedisConPool(size_t poolSize, const char* host, int port, const char* pwd)
@@ -167,6 +168,11 @@ public:
 	bool HDel(const std::string& key, const std::string& field);
 	bool Del(const std::string &key);
 	bool ExistsKey(const std::string &key);
+	std::string acquireLock(const std::string& lockName, int lockTimeout, int acquireTimeout);
+	bool releaseLock(const std::string& lockName, const std::string& identifier);
+	bool InitCount(const std::string& server_name);
+	bool IncreaseCount(const std::string& server_name);
+	bool DecreaseCount(const std::string& server_name);
 	void Close() {
 		_con_pool->Close();
 		_con_pool->ClearConnections();

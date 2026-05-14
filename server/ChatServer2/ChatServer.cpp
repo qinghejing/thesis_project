@@ -24,12 +24,18 @@ int main()
 	try {
 		auto pool = AsioIOServicePool::GetInstance();
 		//将登录数设置为0
-		RedisMgr::GetInstance()->HSet(LOGIN_COUNT, server_name,"0");
+		RedisMgr::GetInstance()->InitCount(server_name);
+
+		boost::asio::io_context  io_context;
+		auto port_str = cfg["SelfServer"]["Port"];
+		CServer s(io_context, atoi(port_str.c_str()));
+
+		LogicSystem::GetInstance()->SetServer(&s);
 
 		//定义一个GrpcServer
-
 		std::string server_address(cfg["SelfServer"]["Host"] + ":" + cfg["SelfServer"]["RPCPort"]);
 		ChatServiceImpl service;
+		service.RegisterServer(&s);
 		grpc::ServerBuilder builder;
 		// 监听端口和添加服务
 		builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
@@ -46,7 +52,6 @@ int main()
 				server->Wait();
 			});
 
-		boost::asio::io_context  io_context;
 		boost::asio::signal_set signals(io_context, SIGINT, SIGTERM);
 		signals.async_wait([&io_context, pool, &server](auto, auto) {
 			io_context.stop();
@@ -55,8 +60,6 @@ int main()
 				server->Shutdown();
 			}
 			});
-		auto port_str = cfg["SelfServer"]["Port"];
-		CServer s(io_context, atoi(port_str.c_str()));
 		io_context.run();
 		RedisMgr::GetInstance()->HDel(LOGIN_COUNT, server_name);
 		RedisMgr::GetInstance()->Close();

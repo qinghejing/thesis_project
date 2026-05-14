@@ -19,6 +19,7 @@ private:
     TcpMgr();
     void initHandlers();
     void handleMsg(ReqId id, int len, QByteArray data);
+    void notifyOffline();
     QTcpSocket _socket;
     QString _host;
     uint16_t _port;
@@ -26,6 +27,8 @@ private:
     bool _b_recv_pending;
     quint16 _message_id;
     quint32 _message_len;
+    bool _b_login_in;
+    bool _b_notify_offline;
     QMap<ReqId, std::function<void(ReqId id, int len, QByteArray data)>> _handlers;
 public slots:
     void slot_tcp_connect(ServerInfo);
@@ -41,6 +44,7 @@ signals:
     void sig_add_auth_friend(std::shared_ptr<AuthInfo>);
     void sig_auth_rsp(std::shared_ptr<AuthRsp>);
     void sig_text_chat_msg(std::shared_ptr<TextChatMsg> msg);
+    void sig_notify_offline();
 };
 
 #endif // TCPMGR_H

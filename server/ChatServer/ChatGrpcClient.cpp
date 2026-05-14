@@ -173,3 +173,35 @@ TextChatMsgRsp ChatGrpcClient::NotifyTextChatMsg(std::string server_ip,
 
 	return rsp;
 }
+KickUserRsp ChatGrpcClient::NotifyKickUser(std::string server_ip, const KickUserReq& req)
+{
+	KickUserRsp rsp;
+	rsp.set_error(ErrorCodes::Success);
+	rsp.set_uid(req.uid());
+
+	auto find_iter = _pools.find(server_ip);
+	if (find_iter == _pools.end()) {
+		rsp.set_error(ErrorCodes::RPCFailed);
+		return rsp;
+	}
+
+	auto& pool = find_iter->second;
+	ClientContext context;
+	auto stub = pool->getConnection();
+	if (stub == nullptr) {
+		rsp.set_error(ErrorCodes::RPCFailed);
+		return rsp;
+	}
+
+	Status status = stub->NotifyKickUser(&context, req, &rsp);
+	Defer defercon([&stub, this, &pool]() {
+		pool->returnConnection(std::move(stub));
+		});
+
+	if (!status.ok()) {
+		rsp.set_error(ErrorCodes::RPCFailed);
+		return rsp;
+	}
+
+	return rsp;
+}
