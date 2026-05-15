@@ -23,7 +23,7 @@
 ChatDialog::ChatDialog(QWidget *parent) :
     QDialog(parent),
     ui(new Ui::ChatDialog),_b_loading(false),_mode(ChatUIMode::ChatMode),
-    _state(ChatUIMode::ChatMode),_last_widget(nullptr),_cur_chat_uid(0)
+    _state(ChatUIMode::ChatMode),_last_widget(nullptr),_cur_chat_uid(0),_heartbeat_timer(nullptr)
 {
     ui->setupUi(this);
 
@@ -147,10 +147,28 @@ ChatDialog::ChatDialog(QWidget *parent) :
             this, &ChatDialog::slot_text_chat_msg);
 
     connect(ui->chat_page, &ChatPage::sig_append_send_chat_msg, this, &ChatDialog::slot_append_send_chat_msg);
+
+    _heartbeat_timer = new QTimer(this);
+    connect(_heartbeat_timer, &QTimer::timeout, this, [this]() {
+        auto user_info = UserMgr::GetInstance()->GetUserInfo();
+        if (!user_info) {
+            return;
+        }
+
+        QJsonObject textObj;
+        textObj["fromuid"] = user_info->_uid;
+        QJsonDocument doc(textObj);
+        QByteArray jsonData = doc.toJson(QJsonDocument::Compact);
+        emit TcpMgr::GetInstance()->sig_send_data(ReqId::ID_HEART_BEAT_REQ, jsonData);
+    });
+    _heartbeat_timer->start(10000);
 }
 
 ChatDialog::~ChatDialog()
 {
+    if (_heartbeat_timer) {
+        _heartbeat_timer->stop();
+    }
     delete ui;
 }
 

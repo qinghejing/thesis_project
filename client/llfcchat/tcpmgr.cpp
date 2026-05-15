@@ -443,6 +443,25 @@ void TcpMgr::initHandlers()
                  << " seq is " << jsonObj["seq"].toInt()
                  << " trans_size is " << jsonObj["trans_size"].toString();
       });
+    _handlers.insert(ID_HEARTBEAT_RSP, [this](ReqId id, int len, QByteArray data) {
+        Q_UNUSED(len);
+        qDebug() << "handle id is " << id << " data is " << data;
+
+        QJsonDocument jsonDoc = QJsonDocument::fromJson(data);
+        if (jsonDoc.isNull()) {
+            qDebug() << "Failed to create QJsonDocument.";
+            return;
+        }
+
+        QJsonObject jsonObj = jsonDoc.object();
+        int err = jsonObj["error"].toInt(ErrorCodes::ERR_JSON);
+        if (err != ErrorCodes::SUCCESS) {
+            qDebug() << "Heart Beat Msg Failed, err is " << err;
+            return;
+        }
+
+        qDebug() << "Receive Heart Beat Msg Success";
+      });
 }
 
 void TcpMgr::handleMsg(ReqId id, int len, QByteArray data)

@@ -45,6 +45,8 @@ private:
 #define MAX_RECVQUE  10000
 #define MAX_SENDQUE 1000
 #define FILE_WORKER_COUNT 4
+#define HEARTBEAT_CHECK_INTERVAL 60
+#define HEARTBEAT_TIMEOUT 60
 
 
 enum MSG_IDS {
@@ -64,12 +66,15 @@ enum MSG_IDS {
 	ID_UPLOAD_FILE_REQ = 1020, //上传文件分片请求
 	ID_UPLOAD_FILE_RSP = 1021, //上传文件分片回复
 	ID_NOTIFY_OFF_LINE_REQ = 1022, //notify offline
+	ID_HEART_BEAT_REQ = 1023, //heartbeat request
+	ID_HEARTBEAT_RSP = 1024, //heartbeat response
 };
 
 #define USERIPPREFIX  "uip_"
 #define USERTOKENPREFIX  "utoken_"
 #define IPCOUNTPREFIX  "ipcount_"
 #define USER_BASE_INFO "ubaseinfo_"
+#define USER_SESSION_PREFIX "usession_"
 #define LOGIN_COUNT  "logincount"
 #define NAME_INFO  "nameinfo_"
 

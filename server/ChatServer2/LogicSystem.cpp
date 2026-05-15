@@ -125,6 +125,9 @@ void LogicSystem::RegisterCallBacks() {
 
 	_fun_callbacks[ID_UPLOAD_FILE_REQ] = std::bind(&LogicSystem::DealFileUpload, this,
 		placeholders::_1, placeholders::_2, placeholders::_3);
+
+	_fun_callbacks[ID_HEART_BEAT_REQ] = std::bind(&LogicSystem::HeartBeatHandler, this,
+		placeholders::_1, placeholders::_2, placeholders::_3);
 	
 }
 
@@ -251,6 +254,7 @@ void LogicSystem::LoginHandler(shared_ptr<CSession> session, const short &msg_id
 	session->SetUserId(uid);
 	//为用户设置登录ip server的名字
 	RedisMgr::GetInstance()->Set(ipkey, server_name);
+	RedisMgr::GetInstance()->Set(USER_SESSION_PREFIX + uid_str, session->GetSessionId());
 	//uid和session绑定管理,方便以后踢人操作
 	UserMgr::GetInstance()->SetUserSession(uid, session);
 
@@ -567,6 +571,17 @@ void LogicSystem::DealFileUpload(std::shared_ptr<CSession> session, const short&
 			trans_size, last, file_data), index);
 }
 
+void LogicSystem::HeartBeatHandler(std::shared_ptr<CSession> session, const short& msg_id, const string& msg_data) {
+	Json::Reader reader;
+	Json::Value root;
+	reader.parse(msg_data, root);
+	auto uid = root["fromuid"].asInt();
+	std::cout << "receive heart beat msg, uid is " << uid << std::endl;
+
+	Json::Value rtvalue;
+	rtvalue["error"] = ErrorCodes::Success;
+	session->Send(rtvalue.toStyledString(), ID_HEARTBEAT_RSP);
+}
 bool LogicSystem::isPureDigit(const std::string& str)
 {
 	for (char c : str) {

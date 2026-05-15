@@ -10,6 +10,7 @@
 #include <memory>
 #include "userdata.h"
 #include <QListWidgetItem>
+#include <QTimer>
 
 namespace Ui {
 class ChatDialog;
@@ -47,6 +48,7 @@ private:
     //todo...
     QMap<int, QListWidgetItem*> _chat_items_added;
     int _cur_chat_uid;
+    QTimer* _heartbeat_timer;
 public slots:
     void slot_loading_chat_user();
     void slot_side_chat();

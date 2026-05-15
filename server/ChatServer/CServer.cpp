@@ -4,14 +4,22 @@
 #include "UserMgr.h"
 #include "RedisMgr.h"
 #include "ConfigMgr.h"
+#include <chrono>
+#include <ctime>
 CServer::CServer(boost::asio::io_context& io_context, short port):_io_context(io_context), _port(port),
-_acceptor(io_context, tcp::endpoint(tcp::v4(),port))
+_acceptor(io_context, tcp::endpoint(tcp::v4(),port)), _timer(io_context)
 {
 	cout << "Server start success, listen on port : " << _port << endl;
 	StartAccept();
+	_timer.expires_after(std::chrono::seconds(HEARTBEAT_CHECK_INTERVAL));
+	_timer.async_wait([this](boost::system::error_code ec) {
+		on_timer(ec);
+		});
 }
 
 CServer::~CServer() {
+	boost::system::error_code ec;
+	_timer.cancel(ec);
 	cout << "Server destruct listen on port : " << _port << endl;
 }
 
@@ -49,9 +57,51 @@ void CServer::ClearSession(std::string uuid) {
 	if (session) {
 		auto uid = session->GetUserId();
 		if (uid > 0) {
-			UserMgr::GetInstance()->RmvUserSession(uid);
+			UserMgr::GetInstance()->RmvUserSession(uid, uuid);
 			auto server_name = ConfigMgr::Inst().GetValue("SelfServer", "Name");
 			RedisMgr::GetInstance()->DecreaseCount(server_name);
 		}
 	}
+}
+bool CServer::CheckValid(const std::string& uuid) {
+	lock_guard<mutex> lock(_mutex);
+	return _sessions.find(uuid) != _sessions.end();
+}
+
+void CServer::on_timer(const boost::system::error_code& ec) {
+	if (ec) {
+		return;
+	}
+
+	std::vector<std::shared_ptr<CSession>> expired_sessions;
+	int session_count = 0;
+	{
+		lock_guard<mutex> lock(_mutex);
+		auto now = std::time(nullptr);
+		for (auto& item : _sessions) {
+			auto& session = item.second;
+			if (session->IsHeartbeatExpired(now)) {
+				session->Close();
+				expired_sessions.push_back(session);
+				continue;
+			}
+
+			if (session->GetUserId() > 0) {
+				session_count++;
+			}
+		}
+	}
+
+	for (auto& session : expired_sessions) {
+		session->DealExceptionSession();
+	}
+
+	auto& cfg = ConfigMgr::Inst();
+	auto self_name = cfg["SelfServer"]["Name"];
+	RedisMgr::GetInstance()->HSet(LOGIN_COUNT, self_name, std::to_string(session_count));
+
+	_timer.expires_after(std::chrono::seconds(HEARTBEAT_CHECK_INTERVAL));
+	_timer.async_wait([this](boost::system::error_code ec) {
+		on_timer(ec);
+		});
 }
